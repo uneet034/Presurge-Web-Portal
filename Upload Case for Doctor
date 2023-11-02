@@ -1,0 +1,305 @@
+<!-- The View STL Modal -->
+<div id="myModal" class="modal"> 
+  <!-- Modal content -->   
+  <div class="modal-content">
+    <span class="close">&times;</span>   
+    <div id="stl_cont" style="width:100%;height:95%;margin:0 auto;">
+     <div id="overlay">
+      <div class="cv-spinner">    
+        <span class="spinner"></span>
+      </div>
+     </div>
+    </div> 
+     <progress id="pb1" value="0" max="1"></progress>
+    <p>Use your mouse to interact with the image.</p>   
+  </div>  
+</div>
+
+<script type="text/javascript" src="https://main.d3mz33x4j7ydxt.amplifyapp.com/js/webflow-doctor-login-uploadfile.js"></script>
+
+<script>
+// Global Variables
+var uploader = null;
+
+function validateInput(anatomy,modality,patient,doc_name,surgery_date,hospital) {
+if(anatomy.length === 0 || modality.length === 0 || patient.length === 0 || doc_name.length === 0 || surgery_date.length === 0 || hospital.length === 0)
+  {
+  alert('One or more required fields (marked with an asterix), have been left empty.\nPlease fill in the required field(s) to proceed.');
+  return false;
+  } 
+if(fileInput.files.length == 0)
+  {
+  alert('Please select a DICOM (.zip) file to upload.');
+  return false;      
+  }     
+return true;
+}
+
+// Generate a case id from field values that have been entered by the user.
+function generateCaseId(modality, patient, doc_name, hospital) {
+var randomNo = generateRandom(1,999);
+
+// Generate case id.   
+caseid = modality + "-" + patient.slice(0, 3).toUpperCase() + "-" + hospital.slice(0, 3).toUpperCase() + "-" + doc_name.slice(0, 3).toUpperCase() + "-" + randomNo.toString();
+return caseid;
+}
+
+// Called when the View STL button is clicked
+function handleViewSTL(evt)
+{
+evt.preventDefault();
+// display the modal
+modal.style.display = "block";
+$("#overlay").fadeIn(300);
+// Presurge AWS endpoint
+var baseUrl = 'https://w3alewzuga.execute-api.ap-south-1.amazonaws.com/prod';
+const value = evt.target.getAttribute('viewstl-btn-attr');
+const fileName = value +'.stl';
+const fileType = 'STL';
+
+// Set viewOnly to true since we only want to view the STL and not download it.
+const viewOnly = true;
+// Get the Memberstack JWT token
+const token = window.$memberstackDom.getMemberCookie();
+if(fileName)
+  {
+  const downloaderOptions = {
+    fileName: fileName,
+    fileType: fileType,
+    viewOnly: viewOnly,
+    baseURL: baseUrl,
+    token: token
+    }
+  const downloader = new Downloader(downloaderOptions);
+  // here we are passing callback functions
+  downloader
+    .onError((error) => {
+       console.error(error);
+       })
+    .onCompletion((status,signedURL) => {
+       getViewSTLCompletionStatus(status,signedURL,viewOnly);
+     })
+  console.log('handleDownload) downloader start going to be called');
+  // starts the download of the file
+  downloader.start()  
+  }
+}
+
+function getViewSTLCompletionStatus(status,signedURL,viewOnly)
+{
+console.log('getViewSTLCompletionStatus() status : ' + status);
+console.log('getViewSTLCompletionStatus() signedURL : ' + signedURL);
+// if we only want to view the STL instead of downloading it.
+if(viewOnly)
+  {
+  $("#overlay").fadeOut(300);
+  showSTLViewer(signedURL);
+  }
+}
+
+// Called when the Upload and Submit button is clicked
+// Generates a Case Id from elements in the form and then
+// uses this Case Id as the name of the file and uploads it to S3
+function handleUploadSubmit(evt)
+{
+console.log('In handleUploadSubmit');
+evt.preventDefault();
+// get the value of all the fields in our form
+const anatomy = $('#Anatomy').val();
+const modality = $('#Modality').val();
+const patient = $('#Patient-Initials').val();
+const doc_name = $('#Doctor-s-Name').val();
+const surgery_date = $('#surgery_date').val();
+const hospital = $('#Hospital').val();
+const validated = validateInput(anatomy,modality,patient,doc_name,surgery_date, hospital);
+// stop processing if validation fails   
+if(validated != true)
+  {
+  return;  
+  }
+// file - represents the actual file
+// fileName - is the new name we want the file to have this will be the Case ID with a .zip (.stl) suffix
+const file = fileInput.files[0];
+var caseid = generateCaseId(modality,patient,doc_name,hospital);
+document.getElementById('CaseID').value = caseid;
+
+const fileName = caseid + '.zip';
+
+$('#uploading-div').fadeIn(400);
+    
+// Get the Memberstack JWT token
+const token = window.$memberstackDom.getMemberCookie(); 
+// uploads file and submits form on success
+uploadFile(token,file,fileName,'DICOM');
+}
+
+function filterCollectionList(user)
+{
+    $(".w-dyn-item").each(function()
+     { 
+     var itemName = $(this).text().toLowerCase(); 
+     if(itemName.includes(user))   
+       {
+       // remove the div with the member id and then show the block.
+       $(this).find("div:contains('" + user + "'):not(:has(div))").remove();
+       $(this).show();   
+       } 
+     });
+}
+
+function displayForLoggedInUser()
+{
+    var member_id = null;
+    // Code to get the current logged in user
+    window.$memberstackDom.getCurrentMember().then((member) => {
+        // if there is a logged in user      
+        if(member.data) {
+          console.log('there is a member', member);
+          member_id = member.data.id;
+          filterCollectionList(member_id);
+          } else {
+                 console.log('no member', member);         
+                 // do logged out logic here
+                 member_id = "";
+                 }
+          // Assigns member id to the member_id hidden text field          
+          document.getElementById('member_id').value = member_id;
+    });
+}
+
+// Function to generate random number
+function generateRandom(min, max) 
+{
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function handleOrder(evt)
+{
+    // the case id for which we are uploading the STL.
+    caseid_attr = evt.target.getAttribute('order-btn-attr');
+    document.getElementById("caseid_order").value = caseid_attr;
+    document.getElementById("Anatomical-Model").checked = false;
+    document.getElementById("Surgery-Planning-and-Guide").checked = false;
+    document.getElementById("Patient-Customized-Implant").checked = false;
+    document.getElementById("Case-Description").value = "";
+}
+
+
+// -- Main entry point --
+document.getElementById('CaseID').readOnly = true;
+document.getElementById('member_id').readOnly = true;
+
+// Get logged in member and filter collection list as per this user 
+displayForLoggedInUser();
+
+// -- Event Listeners --
+
+var fileInput = document.getElementById("fileinput");
+var allowedExtension = ".zip";
+
+fileInput.addEventListener("change", function() {
+  // Check that the file extension is supported.
+  // If not, clear the input.
+  var hasInvalidFiles = false;
+  var fileName = this.files[0].name.toLowerCase();
+  
+  if (!fileName.endsWith(allowedExtension)) {
+     fileInput.value = ""; 
+     alert("Incorrect file type. Please select a zip file.");
+   }
+});
+
+// Adds an event listener for the click event of the Upload and Submit
+// button and the Cancel upload button
+document.getElementById('uploadsubmit').addEventListener('click', handleUploadSubmit, false);
+document.getElementById('cancel').addEventListener('click', handleCancelUpload, false);
+
+// Create event listener for all link clicks that have the 
+// download-btn-attr and upload-btn-attr attributes. Other links are ignored.
+document.querySelectorAll('a[viewstl-btn-attr]').forEach(link => {  
+  var case_status = link.getAttribute('case-status-attr');
+  case_status = case_status.toLowerCase();
+  //disabled the button if case status reads DICOM Received.
+  if(case_status == "dicom received")
+    {
+    link.classList.add("disable-button");
+    }
+  else
+    {
+    link.classList.remove("disable-button");
+    }
+  link.addEventListener('click',handleViewSTL);
+});
+
+document.querySelectorAll('a[order-btn-attr]').forEach(link => {
+  link.addEventListener('click',handleOrder);
+});
+
+
+// ViewSTL code
+// Get the modal
+var modal = document.getElementById("myModal");
+
+// Get the <span> element that closes the modal
+var span = document.getElementsByClassName("close")[0];
+
+function load_prog(load_status, load_session)
+{
+  var loaded=0;
+  var total=0;
+   
+  //go over all models that are/were loaded
+  Object.keys(load_status).forEach(function(model_id)
+  {
+    if (load_status[model_id].load_session==load_session) 
+    //need to make sure we're on the last loading session (not counting previous loaded models)
+       {         
+         loaded+=load_status[model_id].loaded;
+         total+=load_status[model_id].total;
+         console.log('load_prog model_id: ' + model_id);
+         console.log('load_prog loaded: ' + loaded);
+         console.log('load_prog total: ' + total);
+         //set the relevant model's progress ba
+         document.getElementById("pb"+model_id).value = load_status[model_id].loaded/load_status[model_id].total;
+       }
+   });            
+}
+
+
+function showSTLViewer(signedURL)
+{
+  var stl_viewer=new StlViewer
+            (
+                document.getElementById("stl_cont"),
+                {
+                    loading_progress_callback:load_prog,
+                    models:
+                    [                               
+                    {filename: signedURL}
+                    ],  
+                    loadstl_url: "https://main.d3mz33x4j7ydxt.amplifyapp.com/viewstl/load_stl.js"
+                }
+            );
+}
+
+// When the user clicks on <span> (x), close the modal
+span.onclick = function() {
+  modal.style.display = "none";
+  $("#stl_cont").empty();
+  // reset the progress bar
+  document.getElementById("pb1").value = 0;
+}
+
+// When the user clicks anywhere outside of the modal, close it
+window.onclick = function(event) {
+  if (event.target == modal) {
+    modal.style.display = "none";
+    $("#stl_cont").empty();
+    // reset the progress bar
+    document.getElementById("pb1").value = 0;
+  }
+}
+
+</script>
