@@ -1,0 +1,314 @@
+
+<!-- 
+This file is inserted in the Webflow Doctor Login page before the /body tag
+
+The source for the Downloader class would change once you upload a modified download.txt (js) file to Webflow
+-->
+
+<!-- The View STL Modal -->
+<div id="myModal" class="modal"> 
+  <!-- Modal content -->
+  <div class="modal-content">
+    <span class="close">&times;</span>   
+    <div id="stl_cont" style="width:100%;height:800px;margin:0 auto;"></div> 
+     <progress id="pb1" value="0" max="1"></progress>
+    <p>Use your mouse to interact with the image.</p>   
+  </div>  
+</div>
+
+<script type="text/javascript" src="https://main.d3mz33x4j7ydxt.amplifyapp.com/js/webflow-betic-page-uploadfile.js"></script>
+
+<script>
+
+// Global Variables
+//
+var uploader = null;
+var caseid_attr = "";
+
+// Our Download button has the case-id-btn attribute and 
+// the value of this attribute is the Case Id from our CMS collection.
+
+// Create event listener for all link clicks that have the 
+// download-btn attribute. Other links are ignored.
+document.querySelectorAll('a[download-btn-attr]').forEach(link => {
+  link.addEventListener('click',handleDownload);
+});
+
+// event listener for the Upload Model button
+document.querySelectorAll('a[upload-btn-attr]').forEach(link => {
+  link.addEventListener('click',handleUploadSTL)
+});
+
+// Create event listener for all link clicks that have the 
+// viewstl-btn-attr. Other links are ignored.
+document.querySelectorAll('a[viewstl-btn-attr]').forEach(link => {
+  var case_status = link.getAttribute('case-status-attr');
+  case_status = case_status.toLowerCase();
+  //disabled the button if case status reads DICOM Received.
+  if(case_status == "dicom received")
+    {
+    link.classList.add("disable-button");
+    }
+  else
+    {
+    link.classList.remove("disable-button");
+    }
+  link.addEventListener('click',handleViewSTL);
+});
+
+
+function handleDownload(evt) {
+    evt.preventDefault();
+    
+    // Presurge AWS endpoint
+    var baseUrl = 'https://w3alewzuga.execute-api.ap-south-1.amazonaws.com/prod';
+    const value = evt.target.getAttribute('download-btn-attr');
+    const fileName = value +'.zip';
+    const fileType = 'DICOM';
+    // Set viewOnly to true if we only want to view the STL and not download it.
+    // In the BETiC Login page we actually need to download the DICOM file therefore
+    // will set this to false. 
+    const viewOnly = false;
+    
+    // Get the Memberstack JWT token
+    const token = window.$memberstackDom.getMemberCookie();
+    
+    if(fileName)
+      {
+        const downloaderOptions = {
+           fileName: fileName,
+           fileType: fileType,
+           viewOnly: viewOnly,
+           baseURL: baseUrl,
+           token: token
+        }
+                
+        const downloader = new Downloader(downloaderOptions);
+        
+        // here we are passing callback functions
+        downloader
+          .onError((error) => {
+            console.error(error);
+            onDownloadError(error);
+          })
+          .onCompletion((status,signedURL) => {
+            getDownloadCompletionStatus(status,signedURL);
+          })
+                  
+        console.log('handleDownload) downloader start going to be called');
+        // starts the download of the file
+        downloader.start()  
+      }
+            
+}
+
+
+function getDownloadCompletionStatus(status,signedURL)
+{
+    console.log('getDownloadCompletionStatus() status : ' + status);
+    console.log('getDownloadCompletionStatus() signedURL : ' + signedURL);
+}
+
+function handleUploadSTL(evt)
+{
+    fileInput.value = '';
+    // the case id for which we are uploading the STL.
+    caseid_attr = evt.target.getAttribute('upload-btn-attr');
+    document.getElementById("CaseID").value = caseid_attr;
+}
+
+
+// Called when the Upload and Submit button is clicked
+// Generates a Case Id from elements in the form and then
+// uses this Case Id as the name of the file and uploads it to S3
+function handleUploadSubmit(evt) 
+{
+    console.log('In handleUploadSubmit');
+    evt.preventDefault();
+    
+    // If no file has been selected then the user is prompted and processing is halted.
+    if(fileInput.files.length == 0)
+      {
+      alert('Please select a STL (.stl) file to upload.');
+      return;      
+      }
+    
+    // file - represents the actual file
+    // fileName - is the new name we want the file to have this will be the Case ID with a .zip suffix
+    // NOTE: in the event we are uploading a STL then we need to have the STL file name to be Case ID with a .stl suffix
+    const file = fileInput.files[0];
+    const fileName = caseid_attr + '.stl';
+    
+    $('#stl-uploading-div').fadeIn(400);
+    
+    // Get the Memberstack JWT token
+    const token = window.$memberstackDom.getMemberCookie();
+
+    // uploads file and submits form on success
+    uploadFile(token,file,fileName,'STL');
+}
+
+
+// Called when the View STL button is clicked
+function handleViewSTL(evt)
+{
+    evt.preventDefault();
+    // display the modal.
+    modal.style.display = "block";
+       
+    // Presurge AWS endpoint
+    var baseUrl = 'https://w3alewzuga.execute-api.ap-south-1.amazonaws.com/prod';
+    const value = evt.target.getAttribute('viewstl-btn-attr');
+    const fileName = value +'.stl';
+    const fileType = 'STL';
+
+    // Set viewOnly to true since we only want to view the STL and not download it.
+    const viewOnly = true;
+    
+    // Get the Memberstack JWT token
+    const token = window.$memberstackDom.getMemberCookie();
+    
+    if(fileName)
+      {
+        const downloaderOptions = {
+           fileName: fileName,
+           fileType: fileType,
+           viewOnly: viewOnly,
+           baseURL: baseUrl,
+           token: token
+        }
+                
+        const downloader = new Downloader(downloaderOptions);
+        
+        // here we are passing callback functions
+        downloader
+          .onError((error) => {
+            console.error(error);
+            onDownloadError(error);
+            modal.style.display = "none";
+          })
+          .onCompletion((status,signedURL) => {
+            getViewSTLCompletionStatus(status,signedURL,viewOnly);
+          })            
+        console.log('handleDownload) downloader start going to be called');
+        // starts the download of the file
+        downloader.start()  
+      }
+}
+
+function getViewSTLCompletionStatus(status,signedURL,viewOnly)
+{
+    console.log('getViewSTLCompletionStatus() status : ' + status);
+    console.log('getViewSTLCompletionStatus() signedURL : ' + signedURL);
+    if(status == 1) {
+      // if we only want to view the STL instead of downloading it.
+      if(viewOnly)
+        {
+        showSTLViewer(signedURL);
+        }
+    }
+}
+
+// -- Main entry point --
+
+// -- Event Listeners --
+
+// Checks that the file selected is a .zip file or
+// prompts the user to select the correct file.
+var fileInput = document.getElementById("stl_fileinput");
+var allowedExtension = ".stl";
+
+fileInput.addEventListener("change", function() {
+  // Check that the file extension is supported.
+  // If not, clear the input.
+  var hasInvalidFiles = false;
+  var fileName = this.files[0].name.toLowerCase();
+  
+  if (!fileName.endsWith(allowedExtension)) {
+     fileInput.value = ""; 
+     alert("Incorrect file type. Please select a .stl file.");
+   }
+});
+
+// Adds an event listener for the click event of the Upload button
+// and the Cancel upload button
+document.getElementById('stl_uploadsubmit').addEventListener('click', handleUploadSubmit, false);
+document.getElementById('stl_cancel').addEventListener('click', handleCancelUpload, false);
+
+// ViewSTL code
+// Get the modal
+var modal = document.getElementById("myModal");
+
+// Get the <span> element that closes the modal
+var span = document.getElementsByClassName("close")[0];
+
+
+function load_prog(load_status, load_session)
+{
+  var loaded=0;
+  var total=0;
+   
+  //go over all models that are/were loaded
+  Object.keys(load_status).forEach(function(model_id)
+  {
+    if (load_status[model_id].load_session==load_session) 
+    //need to make sure we're on the last loading session (not counting previous loaded models)
+       {         
+         loaded+=load_status[model_id].loaded;
+         total+=load_status[model_id].total;
+         console.log('load_prog model_id: ' + model_id);
+         console.log('load_prog loaded: ' + loaded);
+         console.log('load_prog total: ' + total);
+                    
+         //set the relevant model's progress ba
+         document.getElementById("pb"+model_id).value = load_status[model_id].loaded/load_status[model_id].total;
+       }
+   });            
+}
+
+
+function showSTLViewer(signedURL)
+{
+  var stl_viewer=new StlViewer
+            (
+                document.getElementById("stl_cont"),
+                {
+                    loading_progress_callback:load_prog,
+                    models:
+                    [                               
+                    {filename: signedURL}
+                    ],  
+                    loadstl_url: "https://main.d3mz33x4j7ydxt.amplifyapp.com/viewstl/load_stl.js"
+                }
+            );
+}
+
+function onDownloadError(error)
+{
+if(error.message.includes('404')) {
+  alert('The file seems to be missing. Please contact support.');
+  }
+else {
+  alert('Something went wrong retrieving the file. Please contact support.');
+  }
+}
+
+// When the user clicks on <span> (x), close the modal
+span.onclick = function() {
+  modal.style.display = "none";
+  $("#stl_cont").empty();
+  // reset the progress bar
+  document.getElementById("pb1").value = 0;
+}
+
+// When the user clicks anywhere outside of the modal, close it
+window.onclick = function(event) {
+  if (event.target == modal) {
+    modal.style.display = "none";
+    $("#stl_cont").empty();
+    // reset the progress bar
+    document.getElementById("pb1").value = 0;
+  }
+}
+
+</script>
